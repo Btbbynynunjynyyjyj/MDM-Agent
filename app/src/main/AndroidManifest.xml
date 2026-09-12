@@ -16,7 +16,6 @@
 
         <receiver
             android:name=".MDMDeviceAdminReceiver"
-            android:description="@string/app_name"
             android:exported="true"
             android:label="MDM Agent">
             <intent-filter>
