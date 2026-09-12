@@ -1,6 +1,8 @@
 package uz.mdm.agent
 
 import android.app.Activity
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -25,6 +27,7 @@ class MainActivity : Activity() {
     private var allowedApps: List<AppEntry> = emptyList()
 
     private val allowedPackages = setOf(
+        "uz.mdm.agent",
         "com.android.chrome", "com.google.android.gm", "com.google.android.youtube",
         "com.google.android.apps.maps", "org.telegram.messenger", "com.whatsapp",
         "com.google.android.calculator", "com.sec.android.app.popupcalculator",
@@ -32,16 +35,50 @@ class MainActivity : Activity() {
         "com.google.android.apps.drive", "com.google.android.apps.meetings",
         "com.google.android.apps.photos", "com.android.vending",
         "com.google.android.documentsui", "com.google.android.contacts",
-        "com.google.android.deskclock", "com.android.settings"
+        "com.google.android.deskclock"
     )
+
+    private lateinit var devicePolicyManager: DevicePolicyManager
+    private lateinit var adminComponent: ComponentName
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        devicePolicyManager = getSystemService(DevicePolicyManager::class.java)
+        adminComponent = ComponentName(this, MDMDeviceAdminReceiver::class.java)
+
         window.statusBarColor = Color.rgb(7, 17, 31)
         window.navigationBarColor = Color.rgb(5, 10, 18)
         buildUi()
         loadAllowedApps()
+        applyManagedModeIfOwner()
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (::devicePolicyManager.isInitialized && devicePolicyManager.isDeviceOwnerApp(packageName)) {
+            applyManagedModeIfOwner()
+        }
+    }
+
+    private fun applyManagedModeIfOwner() {
+        if (!devicePolicyManager.isDeviceOwnerApp(packageName)) return
+
+        runCatching {
+            devicePolicyManager.setLockTaskPackages(adminComponent, allowedPackages.toTypedArray())
+            devicePolicyManager.setLockTaskFeatures(
+                adminComponent,
+                DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO
+            )
+            if (!devicePolicyManager.isLockTaskPermitted(packageName)) return
+            if (!isInLockTaskMode()) startLockTask()
+        }.onFailure {
+            Toast.makeText(this, "Boshqaruv rejimini yoqishda xatolik", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isInLockTaskMode(): Boolean =
+        runCatching { devicePolicyManager.isLockTaskPermitted(packageName) && isFinishing.not() && isTaskRoot }.getOrDefault(false) &&
+            android.app.ActivityManager::class.java.let { true }
 
     private fun buildUi() {
         val root = LinearLayout(this).apply {
@@ -58,7 +95,10 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(42), dp(42)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
         titleBox.addView(TextView(this).apply { text = "MDM Agent"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
-        titleBox.addView(TextView(this).apply { text = "Managed device"; textSize = 12f; setTextColor(Color.rgb(137, 154, 177)) })
+        titleBox.addView(TextView(this).apply {
+            text = if (devicePolicyManager.isDeviceOwnerApp(packageName)) "Managed device" else "Device setup"
+            textSize = 12f; setTextColor(Color.rgb(137, 154, 177))
+        })
         header.addView(titleBox, LinearLayout.LayoutParams(0, dp(50), 1f))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
 
@@ -86,7 +126,7 @@ class MainActivity : Activity() {
 
     private fun loadAllowedApps() {
         val pm = packageManager
-        allowedApps = allowedPackages.mapNotNull { pkg -> runCatching {
+        allowedApps = allowedPackages.filter { it != packageName }.mapNotNull { pkg -> runCatching {
             val info = pm.getApplicationInfo(pkg, 0)
             AppEntry(pkg, pm.getApplicationLabel(info).toString(), pm.getApplicationIcon(info))
         }.getOrNull() }.sortedBy { it.label.lowercase() }
