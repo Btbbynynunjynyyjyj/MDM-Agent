@@ -63,7 +63,7 @@ class MainActivity : Activity() {
         root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
 
         search = EditText(this).apply {
-            hint = "Dastur qidirish…"; textSize = 15f; singleLine = true
+            hint = "Dastur qidirish…"; textSize = 15f; setSingleLine(true)
             setTextColor(Color.WHITE); setHintTextColor(Color.rgb(120, 137, 161)); setPadding(dp(16), 0, dp(16), 0)
             background = rounded(Color.rgb(14, 28, 47), dp(14).toFloat())
             addTextChangedListener(SimpleTextWatcher { renderApps(it) })
