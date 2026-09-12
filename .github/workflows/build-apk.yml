@@ -37,14 +37,45 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug --stacktrace
 
+      - name: Sign APK for direct installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          INPUT_APK="app/build/outputs/apk/debug/app-debug.apk"
+          ALIGNED_APK="app/build/outputs/apk/debug/app-debug-aligned.apk"
+          SIGNED_APK="app/build/outputs/apk/debug/app-debug-signed.apk"
+
+          keytool -genkeypair \
+            -keystore "$RUNNER_TEMP/mdm-debug.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          "$SDK_BUILD_TOOLS/zipalign" -f -p 4 "$INPUT_APK" "$ALIGNED_APK"
+          "$SDK_BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/mdm-debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --out "$SIGNED_APK" \
+            "$ALIGNED_APK"
+          "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$SIGNED_APK"
+          mv "$SIGNED_APK" "$INPUT_APK"
+          rm -f "$ALIGNED_APK"
+
       - name: Verify APK
         run: |
+          set -euo pipefail
           test -f app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MDM-Agent-debug-apk
+          name: MDM-Agent-v0.3-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
