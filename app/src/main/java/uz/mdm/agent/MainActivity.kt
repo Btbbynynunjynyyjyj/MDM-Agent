@@ -1,6 +1,7 @@
 package uz.mdm.agent
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.graphics.Color
@@ -69,16 +70,18 @@ class MainActivity : Activity() {
                 adminComponent,
                 DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO
             )
-            if (!devicePolicyManager.isLockTaskPermitted(packageName)) return
-            if (!isInLockTaskMode()) startLockTask()
+            if (devicePolicyManager.isLockTaskPermitted(packageName) && !isInLockTaskMode()) {
+                startLockTask()
+            }
         }.onFailure {
             Toast.makeText(this, "Boshqaruv rejimini yoqishda xatolik", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun isInLockTaskMode(): Boolean =
-        runCatching { devicePolicyManager.isLockTaskPermitted(packageName) && isFinishing.not() && isTaskRoot }.getOrDefault(false) &&
-            android.app.ActivityManager::class.java.let { true }
+    private fun isInLockTaskMode(): Boolean {
+        val activityManager = getSystemService(ActivityManager::class.java)
+        return activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+    }
 
     private fun buildUi() {
         val root = LinearLayout(this).apply {
